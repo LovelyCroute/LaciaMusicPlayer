@@ -11,53 +11,53 @@ import ovo.baicaijun.laciamusicplayer.music.MusicPlayer;
 import ovo.baicaijun.laciamusicplayer.music.netease.NeteaseMusicLoader;
 import ovo.baicaijun.laciamusicplayer.util.MessageUtil;
 
-import java.awt.Color;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author BaicaijunOvO
- * @description 网易云音乐播放器UI，支持歌单和在线音乐播放
+ * @description 网易云音乐播放器UI - 现代粉色主题风格
  */
 public class NeteaseMusicGUI extends Screen {
+    // --- 布局常量 ---
+    private static final int HEADER_HEIGHT = 40;
+    private static final int SIDEBAR_WIDTH = 160;
+    private static final int BOTTOM_PANEL_HEIGHT = 70;
+    private static final int ITEM_HEIGHT = 28;
+    private static final int PADDING = 12;
+
     // --- 数据 ---
     private List<MusicListData> playlists = new ArrayList<>();
     private List<MusicListData> recommendPlaylists = new ArrayList<>();
-    // [修复] 新增一个稳定的合并列表，用于UI渲染和交互，避免异步导致的数据不一致
     private List<MusicListData> allPlaylists = new ArrayList<>();
     private List<MusicData> currentSongList = new ArrayList<>();
-    private String selectedPlaylistName = null;
     private int selectedPlaylistIndex = -1;
 
     // --- 缓存 ---
-    private Map<Long, List<MusicData>> playlistSongsCache = new HashMap<>(); // 歌单歌曲缓存
-    private List<MusicData> dailySongsCache = null; // 每日推荐歌曲缓存
-    private long lastDailySongsLoadTime = 0; // 上次加载每日推荐的时间
-    private static final long DAILY_SONGS_CACHE_TIME = 30 * 60 * 1000; // 30分钟缓存时间
+    private Map<Long, List<MusicData>> playlistSongsCache = new HashMap<>();
+    private List<MusicData> dailySongsCache = null;
+    private long lastDailySongsLoadTime = 0;
+    private static final long DAILY_SONGS_CACHE_TIME = 30 * 60 * 1000;
 
     // --- 状态 ---
     private int leftScrollOffset = 0;
     private int rightScrollOffset = 0;
+    private int maxVisibleLeftItems = 0;
+    private int maxVisibleRightItems = 0;
     private boolean volumeSliderDragging = false;
     private boolean progressSliderDragging = false;
     private float volume = 0.5f;
 
-    // --- 布局常量 ---
-    private static final int LEFT_PANEL_WIDTH = 150;
-    private static final int BOTTOM_PANEL_HEIGHT = 80; // 增加高度以容纳进度条
-    private static final int ITEM_HEIGHT = 25;
-    private static final int PADDING = 10;
+    // --- 悬停状态 ---
+    private int hoveredPlaylistIndex = -1;
+    private int hoveredSongIndex = -1;
+    private boolean playBtnHover, pauseBtnHover, prevBtnHover, nextBtnHover;
+    private boolean modeBtnHover, lyricsBtnHover;
 
-    // --- 按钮悬停状态 ---
-    private boolean playButtonHovered, pauseButtonHovered, stopButtonHovered;
-    private boolean prevButtonHovered, nextButtonHovered, modeButtonHovered;
-    private boolean lyricsButtonHovered;
-
-    // --- 新增字段 ---
-    private int maxVisibleLeftItems = 0;
-    private int maxVisibleRightItems = 0;
+    // --- 面板尺寸（70%窗口大小）---
+    private int getPanelWidth() { return (int)(this.width * 0.7); }
+    private int getPanelHeight() { return (int)(this.height * 0.7); }
+    private int getPanelX() { return (this.width - getPanelWidth()) / 2; }
+    private int getPanelY() { return (this.height - getPanelHeight()) / 2; }
 
     private static final MusicPlayer musicPlayer = LaciamusicplayerClient.musicPlayer;
 
@@ -68,92 +68,63 @@ public class NeteaseMusicGUI extends Screen {
     @Override
     protected void init() {
         super.init();
-
-        if (NeteaseMusicLoader.cookie == null || LaciamusicplayerClient.cookies == null){
+        if (NeteaseMusicLoader.cookie == null || LaciamusicplayerClient.cookies == null) {
             MessageUtil.sendMessage("请先使用 *music qrcode 登录网易云账号");
             close();
+            return;
         }
-
-        // 加载网易云音乐歌单和推荐内容
         loadNeteasePlaylists();
         loadRecommendations();
-
         if (musicPlayer != null) {
             volume = musicPlayer.getVolume();
         }
     }
 
-    /**
-     * [修复] 新增方法：重建用于UI的合并歌单列表
-     * 这个方法确保了UI总是有个一致的数据源
-     */
     private void rebuildCombinedPlaylists() {
         allPlaylists.clear();
-
-        // 添加每日推荐（特殊项）
-        allPlaylists.add(new MusicListData("每日推荐", -1, "网易云音乐"));
-
-        // 添加推荐歌单
+        allPlaylists.add(new MusicListData("★ 每日推荐", -1, "网易云音乐"));
         if (!recommendPlaylists.isEmpty()) {
-            allPlaylists.add(new MusicListData("--- 推荐歌单 ---", -2, ""));
+            allPlaylists.add(new MusicListData("── 推荐歌单 ──", -2, ""));
             allPlaylists.addAll(recommendPlaylists);
         }
-
-        // 添加用户歌单
         if (!playlists.isEmpty()) {
-            allPlaylists.add(new MusicListData("--- 我的歌单 ---", -3, ""));
+            allPlaylists.add(new MusicListData("── 我的歌单 ──", -3, ""));
             allPlaylists.addAll(playlists);
         }
     }
 
-    /**
-     * 加载网易云音乐歌单
-     */
     private void loadNeteasePlaylists() {
         playlists.clear();
         currentSongList.clear();
-
-        // 异步加载歌单
         new Thread(() -> {
             try {
                 long userID = NeteaseMusicLoader.getUserID();
                 if (userID == 0) {
-                    MessageUtil.sendMessage("无法获取用户ID，请使用 *music qrcode指令登录或检查Cookie设置");
+                    MessageUtil.sendMessage("无法获取用户ID，请检查登录状态");
                     return;
                 }
-
-                List<MusicListData> loadedPlaylists = NeteaseMusicLoader.getMusicList(userID);
-                if (loadedPlaylists != null && !loadedPlaylists.isEmpty()) {
-                    // 在主线程更新UI
-                    if (this.client != null) {
-                        this.client.execute(() -> {
-                            playlists.addAll(loadedPlaylists);
-                            rebuildCombinedPlaylists(); // [修复] 数据更新后，重建UI列表
-                        });
-                    }
+                List<MusicListData> loaded = NeteaseMusicLoader.getMusicList(userID);
+                if (loaded != null && !loaded.isEmpty() && this.client != null) {
+                    this.client.execute(() -> {
+                        playlists.addAll(loaded);
+                        rebuildCombinedPlaylists();
+                    });
                 }
             } catch (Exception e) {
-                MessageUtil.sendMessage("加载网易云音乐歌单失败 " + e);
+                MessageUtil.sendMessage("加载歌单失败: " + e.getMessage());
             }
         }, "NeteasePlaylistLoader").start();
     }
 
-    /**
-     * 加载推荐内容
-     */
     private void loadRecommendations() {
-        // 加载推荐歌单
         new Thread(() -> {
             try {
-                List<MusicListData> loadedRecommendPlaylists = NeteaseMusicLoader.getRecommendMusicList();
-                if (loadedRecommendPlaylists != null && !loadedRecommendPlaylists.isEmpty()) {
-                    if (this.client != null) {
-                        this.client.execute(() -> {
-                            recommendPlaylists.addAll(loadedRecommendPlaylists);
-                            rebuildCombinedPlaylists(); // [修复] 数据更新后，重建UI列表
-                            LaciamusicplayerClient.LOGGER.info("成功加载 {} 个推荐歌单", loadedRecommendPlaylists.size());
-                        });
-                    }
+                List<MusicListData> loaded = NeteaseMusicLoader.getRecommendMusicList();
+                if (loaded != null && !loaded.isEmpty() && this.client != null) {
+                    this.client.execute(() -> {
+                        recommendPlaylists.addAll(loaded);
+                        rebuildCombinedPlaylists();
+                    });
                 }
             } catch (Exception e) {
                 LaciamusicplayerClient.LOGGER.error("加载推荐歌单失败", e);
@@ -161,14 +132,9 @@ public class NeteaseMusicGUI extends Screen {
         }, "RecommendPlaylistLoader").start();
     }
 
-    /**
-     * 加载每日推荐歌曲（带缓存）
-     */
     private void loadDailySongs() {
-        // 检查缓存是否有效
         long currentTime = System.currentTimeMillis();
         if (dailySongsCache != null && (currentTime - lastDailySongsLoadTime) < DAILY_SONGS_CACHE_TIME) {
-            // 使用缓存
             if (this.client != null) {
                 this.client.execute(() -> {
                     currentSongList.clear();
@@ -178,54 +144,43 @@ public class NeteaseMusicGUI extends Screen {
             }
             return;
         }
-
         new Thread(() -> {
             try {
-                List<MusicData> dailySongs = NeteaseMusicLoader.getRecommandListMusics();
-                if (dailySongs != null && !dailySongs.isEmpty()) {
-                    // 更新缓存
-                    dailySongsCache = dailySongs;
+                List<MusicData> songs = NeteaseMusicLoader.getRecommandListMusics();
+                if (songs != null && !songs.isEmpty()) {
+                    dailySongsCache = songs;
                     lastDailySongsLoadTime = System.currentTimeMillis();
-
                     if (this.client != null) {
                         this.client.execute(() -> {
                             currentSongList.clear();
-                            currentSongList.addAll(dailySongs);
+                            currentSongList.addAll(songs);
                             rightScrollOffset = 0;
                         });
                     }
                 }
             } catch (Exception e) {
-                LaciamusicplayerClient.LOGGER.error("加载每日推荐歌曲失败", e);
-                MessageUtil.sendMessage("§c加载每日推荐歌曲失败");
+                MessageUtil.sendMessage("§c加载每日推荐失败");
             }
         }, "DailySongsLoader").start();
     }
 
-    /**
-     * 加载指定歌单的歌曲（带缓存）
-     */
     private void loadPlaylistSongs(long playlistId) {
-        // 检查缓存
         if (playlistSongsCache.containsKey(playlistId)) {
-            List<MusicData> cachedSongs = playlistSongsCache.get(playlistId);
+            List<MusicData> cached = playlistSongsCache.get(playlistId);
             if (this.client != null) {
                 this.client.execute(() -> {
                     currentSongList.clear();
-                    currentSongList.addAll(cachedSongs);
+                    currentSongList.addAll(cached);
                     rightScrollOffset = 0;
                 });
             }
             return;
         }
-
         new Thread(() -> {
             try {
                 List<MusicData> songs = NeteaseMusicLoader.getListMusics(playlistId);
                 if (songs != null && !songs.isEmpty()) {
-                    // 添加到缓存
                     playlistSongsCache.put(playlistId, songs);
-
                     if (this.client != null) {
                         this.client.execute(() -> {
                             currentSongList.clear();
@@ -240,249 +195,472 @@ public class NeteaseMusicGUI extends Screen {
         }, "PlaylistSongsLoader").start();
     }
 
-    /**
-     * 清除缓存
-     */
-    public void clearCache() {
-        playlistSongsCache.clear();
-        dailySongsCache = null;
-        lastDailySongsLoadTime = 0;
-        MessageUtil.sendMessage("§a已清除歌曲缓存");
-    }
-
-    /**
-     * 获取缓存统计信息
-     */
-    public String getCacheStats() {
-        return String.format("歌单缓存: %d, 每日推荐缓存: %s",
-                playlistSongsCache.size(),
-                dailySongsCache != null ? dailySongsCache.size() + "首" : "无");
-    }
-
-    // --- 渲染主方法 ---
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, this.width, this.height, 0xC0101010);
-        updateButtonHoverState(mouseX, mouseY);
-
-        renderLeftPanel(context, mouseX, mouseY);
-        renderRightPanel(context, mouseX, mouseY);
-        renderBottomPanel(context, mouseX, mouseY);
-
-        // 显示加载状态
-        if (allPlaylists.size() <= 1) { // 初始状态只有每日推荐
-            context.drawCenteredTextWithShadow(this.textRenderer, "正在加载歌单...", this.width / 2, this.height / 2, Color.WHITE.getRGB());
+        // 背景透明（不绘制遮罩）
+        
+        int panelX = getPanelX();
+        int panelY = getPanelY();
+        int panelWidth = getPanelWidth();
+        int panelHeight = getPanelHeight();
+        
+        // 主面板
+        GuiTheme.drawShadow(context, panelX, panelY, panelWidth, panelHeight);
+        GuiTheme.drawRoundedRect(context, panelX, panelY, panelWidth, panelHeight, GuiTheme.BG_PANEL, 8);
+        
+        updateHoverState(mouseX, mouseY, panelX, panelY, panelWidth, panelHeight);
+        
+        renderHeader(context, panelX, panelY, panelWidth);
+        renderSidebar(context, panelX, panelY + HEADER_HEIGHT, panelHeight - HEADER_HEIGHT - BOTTOM_PANEL_HEIGHT);
+        renderSongList(context, panelX + SIDEBAR_WIDTH, panelY + HEADER_HEIGHT, 
+                       panelWidth - SIDEBAR_WIDTH, panelHeight - HEADER_HEIGHT - BOTTOM_PANEL_HEIGHT);
+        renderBottomPanel(context, panelX, panelY + panelHeight - BOTTOM_PANEL_HEIGHT, panelWidth);
+        
+        if (allPlaylists.size() <= 1) {
+            context.drawCenteredTextWithShadow(this.textRenderer, "正在加载歌单...", 
+                    panelX + panelWidth / 2, panelY + panelHeight / 2, GuiTheme.TEXT_GRAY);
         }
     }
 
-    // 自定义边框绘制方法，替代 drawBorder
-    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
-        // 上边框
-        context.fill(x, y, x + width, y + 1, color);
-        // 下边框
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        // 左边框
-        context.fill(x, y, x + 1, y + height, color);
-        // 右边框
-        context.fill(x + width - 1, y, x + width, y + height, color);
+    private void renderHeader(DrawContext context, int x, int y, int width) {
+        // 粉色顶部栏
+        GuiTheme.drawRoundedRect(context, x, y, width, HEADER_HEIGHT, GuiTheme.BG_HEADER, 8);
+        context.fill(x, y + HEADER_HEIGHT - 8, x + width, y + HEADER_HEIGHT, GuiTheme.BG_HEADER);
+        
+        // 标题
+        context.drawText(this.textRenderer, "网易云音乐", x + PADDING, y + (HEADER_HEIGHT - 8) / 2, 
+                        GuiTheme.TEXT_WHITE, true);
     }
 
-    // --- 各区域渲染 ---
-    private void renderLeftPanel(DrawContext context, int mouseX, int mouseY) {
-        int panelHeight = this.height - BOTTOM_PANEL_HEIGHT;
-        context.fill(0, 0, LEFT_PANEL_WIDTH, panelHeight, 0x66222222);
-        drawBorder(context, 0, 0, LEFT_PANEL_WIDTH, panelHeight, 0xFF555555);
 
-        context.drawText(this.textRenderer, "歌单列表", PADDING, 5, 0xFFFFFF00, false);
-
-        int startY = 25;
-        int availableHeight = panelHeight - startY - PADDING;
+    private void renderSidebar(DrawContext context, int x, int y, int height) {
+        // 侧边栏背景
+        context.fill(x, y, x + SIDEBAR_WIDTH, y + height, GuiTheme.BG_SIDEBAR);
+        context.fill(x + SIDEBAR_WIDTH - 1, y, x + SIDEBAR_WIDTH, y + height, GuiTheme.DIVIDER);
+        
+        // 标题
+        context.drawText(this.textRenderer, "歌单列表", x + PADDING, y + 8, GuiTheme.TEXT_PINK, false);
+        GuiTheme.drawDivider(context, x + PADDING, y + 22, SIDEBAR_WIDTH - PADDING * 2);
+        
+        int listStartY = y + 30;
+        int availableHeight = height - 40;
         maxVisibleLeftItems = availableHeight / ITEM_HEIGHT;
-
-        // 确保滚动偏移量在合理范围内
-        int maxLeftScroll = Math.max(0, allPlaylists.size() - maxVisibleLeftItems);
-        leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxLeftScroll));
-
+        
+        int maxScroll = Math.max(0, allPlaylists.size() - maxVisibleLeftItems);
+        leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxScroll));
+        
         for (int i = leftScrollOffset; i < Math.min(allPlaylists.size(), leftScrollOffset + maxVisibleLeftItems); i++) {
             MusicListData playlist = allPlaylists.get(i);
-            int y = startY + (i - leftScrollOffset) * ITEM_HEIGHT;
-
-            // [修复] 统一处理悬浮和选中效果
-            boolean isHovered = mouseX > 2 && mouseX < LEFT_PANEL_WIDTH - 2 && mouseY > y && mouseY < y + ITEM_HEIGHT;
-
-            // 非交互元素（分隔线）
+            int itemY = listStartY + (i - leftScrollOffset) * ITEM_HEIGHT;
+            boolean isHovered = (i == hoveredPlaylistIndex);
+            boolean isSelected = (i == selectedPlaylistIndex);
+            
+            // 分隔线项
             if (playlist.getId() <= -2) {
-                context.drawText(this.textRenderer, playlist.getTitle(), PADDING, y + 6, 0xFFAAAAAA, false);
+                context.drawText(this.textRenderer, playlist.getTitle(), x + PADDING, itemY + 8, GuiTheme.TEXT_GRAY, false);
                 continue;
             }
-
-            // 交互元素（每日推荐 & 普通歌单）
-            if (i == selectedPlaylistIndex) {
-                context.fill(2, y, LEFT_PANEL_WIDTH - 2, y + ITEM_HEIGHT, 0x664477AA); // 选中颜色
+            
+            // 可点击项
+            if (isSelected) {
+                context.fill(x, itemY, x + 3, itemY + ITEM_HEIGHT - 2, GuiTheme.PRIMARY_PINK);
+                GuiTheme.drawRoundedRect(context, x + 4, itemY, SIDEBAR_WIDTH - 8, ITEM_HEIGHT - 2, 
+                                         GuiTheme.LIST_ITEM_SELECTED, 4);
             } else if (isHovered) {
-                int hoverColor = (playlist.getId() == -1) ? 0x6644AA44 : 0x44FFFFFF; // 每日推荐用特殊悬浮色，其他用通用色
-                context.fill(2, y, LEFT_PANEL_WIDTH - 2, y + ITEM_HEIGHT, hoverColor);
+                GuiTheme.drawRoundedRect(context, x + 4, itemY, SIDEBAR_WIDTH - 8, ITEM_HEIGHT - 2, 
+                                         GuiTheme.LIST_ITEM_HOVER, 4);
             }
-
-            // 绘制文本
-            if (playlist.getId() == -1) { // 每日推荐
-                context.drawText(this.textRenderer, "★ " + playlist.getTitle(), PADDING, y + 6, 0xFFFFFF00, false);
-            } else { // 普通歌单
-                String displayName = this.textRenderer.trimToWidth(playlist.getTitle(), LEFT_PANEL_WIDTH - PADDING * 2);
-                int color = playlist.getAuthor().equals("网易云音乐") ? 0xFFFFAA00 : Color.WHITE.getRGB();
-                context.drawText(this.textRenderer, displayName, PADDING, y + 6, color, false);
-
-                if (!playlist.getAuthor().isEmpty()) {
-                    String creator = this.textRenderer.trimToWidth("by " + playlist.getAuthor(), LEFT_PANEL_WIDTH - PADDING * 2);
-                    context.drawText(this.textRenderer, creator, PADDING, y + 16, 0xFFAAAAAA, false);
-                }
+            
+            // 图标和文字
+            String icon = playlist.getId() == -1 ? "★" : "♫";
+            int textColor = isSelected ? GuiTheme.TEXT_PINK : GuiTheme.TEXT_DARK;
+            
+            if (playlist.getId() == -1) {
+                // 每日推荐特殊样式
+                context.drawText(this.textRenderer, icon, x + PADDING, itemY + 8, 0xFFFFAA00, false);
+                context.drawText(this.textRenderer, "每日推荐", x + PADDING + 12, itemY + 8, 0xFFFFAA00, false);
+            } else {
+                context.drawText(this.textRenderer, icon, x + PADDING, itemY + 8, textColor, false);
+                String name = this.textRenderer.trimToWidth(playlist.getTitle(), SIDEBAR_WIDTH - 40);
+                context.drawText(this.textRenderer, name, x + PADDING + 12, itemY + 8, textColor, false);
             }
         }
-
-        // 绘制左侧滚动条
+        
+        // 滚动条
         if (allPlaylists.size() > maxVisibleLeftItems) {
-            drawScrollBar(context, 0, startY, LEFT_PANEL_WIDTH, availableHeight,
-                    leftScrollOffset, allPlaylists.size(), maxVisibleLeftItems, true);
+            GuiTheme.drawScrollbar(context, x + SIDEBAR_WIDTH - 6, listStartY, 4, availableHeight,
+                                   leftScrollOffset, allPlaylists.size(), maxVisibleLeftItems);
         }
     }
 
-    private void renderRightPanel(DrawContext context, int mouseX, int mouseY) {
-        int panelX = LEFT_PANEL_WIDTH;
-        int panelWidth = this.width - panelX;
-        int panelHeight = this.height - BOTTOM_PANEL_HEIGHT;
-        context.fill(panelX, 0, this.width, panelHeight, 0x44222222);
-        drawBorder(context, panelX, 0, panelWidth, panelHeight, 0xFF555555);
-
+    private void renderSongList(DrawContext context, int x, int y, int width, int height) {
+        // 列表区域背景
+        context.fill(x, y, x + width, y + height, 0xFFFFFFFF);
+        
+        // 标题栏
+        context.drawText(this.textRenderer, "歌曲列表", x + PADDING, y + 8, GuiTheme.TEXT_PINK, false);
+        if (!currentSongList.isEmpty()) {
+            String countText = "(" + currentSongList.size() + "首)";
+            context.drawText(this.textRenderer, countText, x + PADDING + 55, y + 8, GuiTheme.TEXT_GRAY, false);
+        }
+        GuiTheme.drawDivider(context, x + PADDING, y + 22, width - PADDING * 2);
+        
+        // 列表头
+        int headerY = y + 28;
+        context.drawText(this.textRenderer, "#", x + PADDING, headerY, GuiTheme.TEXT_GRAY, false);
+        context.drawText(this.textRenderer, "歌曲", x + 40, headerY, GuiTheme.TEXT_GRAY, false);
+        context.drawText(this.textRenderer, "歌手", x + width - 120, headerY, GuiTheme.TEXT_GRAY, false);
+        GuiTheme.drawDivider(context, x + PADDING, headerY + 12, width - PADDING * 2);
+        
+        int listStartY = y + 45;
+        int availableHeight = height - 55;
+        maxVisibleRightItems = availableHeight / ITEM_HEIGHT;
+        
+        int maxScroll = Math.max(0, currentSongList.size() - maxVisibleRightItems);
+        rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, maxScroll));
+        
         if (currentSongList.isEmpty()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, "选择歌单加载歌曲",
-                    panelX + panelWidth / 2, panelHeight / 2, 0xFFAAAAAA);
+            context.drawCenteredTextWithShadow(this.textRenderer, "选择歌单加载歌曲", 
+                    x + width / 2, y + height / 2, GuiTheme.TEXT_GRAY);
             return;
         }
-
-        context.drawText(this.textRenderer, "歌曲列表 (" + currentSongList.size() + "首)",
-                panelX + PADDING, 10, 0xFFFFFF00, false);
-
-        int startY = 30;
-        int availableHeight = panelHeight - startY - PADDING;
-        maxVisibleRightItems = availableHeight / ITEM_HEIGHT;
-
-        // 确保滚动偏移量在合理范围内
-        int maxRightScroll = Math.max(0, currentSongList.size() - maxVisibleRightItems);
-        rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, maxRightScroll));
-
+        
         for (int i = rightScrollOffset; i < Math.min(currentSongList.size(), rightScrollOffset + maxVisibleRightItems); i++) {
             MusicData song = currentSongList.get(i);
-            int y = startY + (i - rightScrollOffset) * ITEM_HEIGHT;
-
+            int itemY = listStartY + (i - rightScrollOffset) * ITEM_HEIGHT;
+            boolean isHovered = (i == hoveredSongIndex);
             boolean isCurrent = musicPlayer != null && musicPlayer.isPlaying() &&
-                    musicPlayer.getCurrentMusicData() != null &&
-                    musicPlayer.getCurrentMusicData().equals(song);
-
+                               musicPlayer.getCurrentMusicData() != null &&
+                               musicPlayer.getCurrentMusicData().equals(song);
+            
             if (isCurrent) {
-                context.fill(panelX + 2, y, this.width - 2, y + ITEM_HEIGHT, 0x664477AA);
+                GuiTheme.drawRoundedRect(context, x + 4, itemY, width - 12, ITEM_HEIGHT - 2, 
+                                         GuiTheme.LIST_ITEM_SELECTED, 4);
+            } else if (isHovered) {
+                GuiTheme.drawRoundedRect(context, x + 4, itemY, width - 12, ITEM_HEIGHT - 2, 
+                                         GuiTheme.LIST_ITEM_HOVER, 4);
             }
-
-            String title = this.textRenderer.trimToWidth((i + 1) + ". " + song.getTitle(), panelWidth - PADDING * 2 - 100);
-            String artist = this.textRenderer.trimToWidth(song.getArtist(), 80);
-
-            context.drawText(this.textRenderer, title, panelX + PADDING, y + 6,
-                    isCurrent ? 0xFFFFFF00 : Color.WHITE.getRGB(), false);
-            context.drawText(this.textRenderer, artist, panelX + panelWidth - 90, y + 6, 0xFFAAAAAA, false);
+            
+            // 序号
+            String indexStr = String.format("%02d", i + 1);
+            int indexColor = isCurrent ? GuiTheme.TEXT_PINK : GuiTheme.TEXT_GRAY;
+            context.drawText(this.textRenderer, indexStr, x + PADDING, itemY + 8, indexColor, false);
+            
+            // 歌曲名
+            String title = this.textRenderer.trimToWidth(song.getTitle(), width - 180);
+            int titleColor = isCurrent ? GuiTheme.TEXT_PINK : GuiTheme.TEXT_DARK;
+            context.drawText(this.textRenderer, title, x + 40, itemY + 8, titleColor, false);
+            
+            // 歌手
+            String artist = this.textRenderer.trimToWidth(song.getArtist(), 100);
+            context.drawText(this.textRenderer, artist, x + width - 120, itemY + 8, GuiTheme.TEXT_GRAY, false);
         }
-
-        // 绘制右侧滚动条
+        
+        // 滚动条
         if (currentSongList.size() > maxVisibleRightItems) {
-            drawScrollBar(context, panelX, startY, panelWidth, availableHeight,
-                    rightScrollOffset, currentSongList.size(), maxVisibleRightItems, false);
+            GuiTheme.drawScrollbar(context, x + width - 6, listStartY, 4, availableHeight,
+                                   rightScrollOffset, currentSongList.size(), maxVisibleRightItems);
         }
     }
 
-    // --- 新增滚动条绘制方法 ---
-    private void drawScrollBar(DrawContext context, int x, int y, int width, int height,
-                               int scrollOffset, int totalItems, int visibleItems, boolean isLeftPanel) {
-        if (totalItems <= visibleItems) return;
-
-        // 计算滚动条位置和大小
-        float scrollPercentage = (float) scrollOffset / (totalItems - visibleItems);
-        int scrollBarHeight = Math.max(20, (int) (height * ((float) visibleItems / totalItems)));
-        int scrollBarY = y + (int) (scrollPercentage * (height - scrollBarHeight));
-
-        // 滚动条位置（右侧或左侧）
-        int scrollBarX = isLeftPanel ? LEFT_PANEL_WIDTH - 6 : this.width - 6;
-        int scrollBarWidth = 4;
-
-        // 绘制滚动条背景
-        context.fill(scrollBarX, y, scrollBarX + scrollBarWidth, y + height, 0x66444444);
-
-        // 绘制滚动条滑块
-        context.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0xCC888888);
-    }
-
-    private void renderBottomPanel(DrawContext context, int mouseX, int mouseY) {
-        int panelY = this.height - BOTTOM_PANEL_HEIGHT;
-        context.fill(0, panelY, this.width, this.height, 0xCC333333);
-
-        int buttonY = panelY + PADDING;
-        int centerX = this.width / 2;
-
-        drawCustomButton(context, centerX - 130, buttonY, 80, 20,
-                musicPlayer != null && musicPlayer.isPlaying() ? "继续" : "播放", playButtonHovered);
-        drawCustomButton(context, centerX - 40, buttonY, 80, 20, "暂停", pauseButtonHovered);
-        drawCustomButton(context, centerX + 50, buttonY, 80, 20, "停止", stopButtonHovered);
-        drawCustomButton(context, centerX - 180, buttonY, 40, 20, "<<", prevButtonHovered);
-        drawCustomButton(context, centerX + 140, buttonY, 40, 20, ">>", nextButtonHovered);
-
-        String modeText = "模式";
+    private void renderBottomPanel(DrawContext context, int x, int y, int width) {
+        // 底部面板背景
+        context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT, 0xFFF8F8F8);
+        context.fill(x, y, x + width, y + 1, GuiTheme.DIVIDER);
+        
+        // 当前播放信息
+        int infoY = y + 8;
+        if (musicPlayer != null && musicPlayer.getCurrentMusicData() != null) {
+            MusicData current = musicPlayer.getCurrentMusicData();
+            String title = this.textRenderer.trimToWidth(current.getTitle(), 180);
+            context.drawText(this.textRenderer, title, x + PADDING, infoY, GuiTheme.TEXT_DARK, false);
+            String artist = this.textRenderer.trimToWidth(current.getArtist(), 120);
+            context.drawText(this.textRenderer, artist, x + PADDING, infoY + 12, GuiTheme.TEXT_GRAY, false);
+        } else {
+            context.drawText(this.textRenderer, "未播放", x + PADDING, infoY + 6, GuiTheme.TEXT_GRAY, false);
+        }
+        
+        // 控制按钮
+        int btnAreaX = x + width / 2 - 100;
+        int btnY = y + 8;
+        int btnSize = 26;
+        int btnGap = 6;
+        
+        drawControlButton(context, btnAreaX, btnY, btnSize, "◀◀", prevBtnHover);
+        String playIcon = (musicPlayer != null && musicPlayer.isPlaying() && !musicPlayer.isPaused()) ? "⏸" : "▶";
+        drawControlButton(context, btnAreaX + btnSize + btnGap, btnY, btnSize + 8, playIcon, playBtnHover);
+        drawControlButton(context, btnAreaX + btnSize * 2 + btnGap * 2 + 8, btnY, btnSize, "▶▶", nextBtnHover);
+        
+        String modeIcon = "↻";
         if (musicPlayer != null) {
             switch (musicPlayer.getPlaybackMode()) {
-                case LIST_LOOP: modeText = "列表循环"; break;
-                case SINGLE_LOOP: modeText = "单曲循环"; break;
-                case SHUFFLE: modeText = "随机播放"; break;
+                case SINGLE_LOOP: modeIcon = "①"; break;
+                case SHUFFLE: modeIcon = "⇄"; break;
+                default: modeIcon = "↻"; break;
             }
         }
-        drawCustomButton(context, centerX + 190, buttonY, 80, 20, modeText, modeButtonHovered);
-        drawCustomButton(context, centerX + 280, buttonY, 60, 20, "歌词", lyricsButtonHovered);
-
-        int sliderX = PADDING;
-        int sliderY = panelY + 40;
-        context.drawText(this.textRenderer, "音量:", sliderX, sliderY + 2, 0xFFFFFFFF, false);
-        context.fill(sliderX + 35, sliderY, sliderX + 35 + 150, sliderY + 10, 0xFF444444);
-        int fillWidth = (int) (150 * volume);
-        context.fill(sliderX + 35, sliderY, sliderX + 35 + fillWidth, sliderY + 10, 0xFF4477CC);
-        String volumeText = (int) (volume * 100) + "%";
-        context.drawText(this.textRenderer, volumeText, sliderX + 35 + 150 + 5, sliderY + 2, 0xFFFFFFFF, false);
-
+        drawControlButton(context, btnAreaX + btnSize * 3 + btnGap * 3 + 8, btnY, btnSize, modeIcon, modeBtnHover);
+        drawControlButton(context, btnAreaX + btnSize * 4 + btnGap * 4 + 8, btnY, btnSize, "词", lyricsBtnHover);
+        
+        // 进度条
+        int progressY = y + 45;
+        int progressX = x + PADDING;
+        int progressWidth = width - PADDING * 2 - 100;
+        
         if (musicPlayer != null && musicPlayer.isPlaying()) {
-            int progressX = PADDING;
-            int progressY = panelY + 60;
             long duration = musicPlayer.getDuration();
             long elapsed = musicPlayer.getElapsedTime();
-
-            context.fill(progressX, progressY, progressX + this.width - PADDING * 2, progressY + 8, 0xFF444444);
-
-            if (duration > 0) {
-                int progressWidth = (int) ((this.width - PADDING * 2) * elapsed / duration);
-                context.fill(progressX, progressY, progressX + progressWidth, progressY + 8, 0xFF44AA44);
-            }
-
+            float progress = duration > 0 ? (float) elapsed / duration : 0;
+            GuiTheme.drawProgressBar(context, progressX, progressY, progressWidth, 6, progress);
             String timeText = formatTime(elapsed * 1000) + " / " + formatTime(duration * 1000);
-            context.drawText(this.textRenderer, timeText, progressX, progressY + 12, 0xFFFFFFFF, false);
+            context.drawText(this.textRenderer, timeText, progressX + progressWidth + 8, progressY - 2, 
+                            GuiTheme.TEXT_GRAY, false);
+        } else {
+            GuiTheme.drawProgressBar(context, progressX, progressY, progressWidth, 6, 0);
+            context.drawText(this.textRenderer, "00:00 / 00:00", progressX + progressWidth + 8, progressY - 2,
+                            GuiTheme.TEXT_GRAY, false);
         }
+        
+        // 音量
+        int volX = x + width - 120;
+        int volY = y + 12;
+        context.drawText(this.textRenderer, "♪", volX, volY, GuiTheme.TEXT_GRAY, false);
+        GuiTheme.drawProgressBar(context, volX + 15, volY + 2, 80, 6, volume);
+    }
 
-        if (musicPlayer != null) {
-            String status;
-            if (musicPlayer.isPlaying()) {
-                MusicData currentSong = musicPlayer.getCurrentMusicData();
-                status = (currentSong != null) ? "正在播放: " + currentSong.getTitle() + " - " + currentSong.getArtist() : "正在播放: 未知歌曲";
-                context.drawText(this.textRenderer, status, centerX - 200, panelY + 38, 0xFF00FF00, false);
+    private void drawControlButton(DrawContext context, int x, int y, int size, String icon, boolean hovered) {
+        int bgColor = hovered ? GuiTheme.BTN_HOVER : GuiTheme.BTN_NORMAL;
+        int borderColor = hovered ? GuiTheme.PRIMARY_PINK : GuiTheme.DIVIDER;
+        GuiTheme.drawRoundedRectWithBorder(context, x, y, size, size, bgColor, borderColor, size / 2);
+        int textColor = hovered ? GuiTheme.TEXT_PINK : GuiTheme.TEXT_DARK;
+        int textX = x + (size - this.textRenderer.getWidth(icon)) / 2;
+        int textY = y + (size - 8) / 2;
+        context.drawText(this.textRenderer, icon, textX, textY, textColor, false);
+    }
 
-                if (!musicPlayer.getCurrentPlaylist().isEmpty()) {
-                    String progressText = "进度: " + (musicPlayer.getCurrentPlaylistIndex() + 1) + "/" + musicPlayer.getCurrentPlaylist().size();
-                    context.drawText(this.textRenderer, progressText, centerX + 200, panelY + 38, 0xFFFFFF00, false);
+
+    private void updateHoverState(int mouseX, int mouseY, int panelX, int panelY, int panelWidth, int panelHeight) {
+        hoveredPlaylistIndex = -1;
+        hoveredSongIndex = -1;
+        playBtnHover = pauseBtnHover = prevBtnHover = nextBtnHover = modeBtnHover = lyricsBtnHover = false;
+        
+        // 侧边栏悬停
+        int sidebarY = panelY + HEADER_HEIGHT + 30;
+        int sidebarHeight = panelHeight - HEADER_HEIGHT - BOTTOM_PANEL_HEIGHT - 40;
+        if (mouseX >= panelX && mouseX < panelX + SIDEBAR_WIDTH && 
+            mouseY >= sidebarY && mouseY < sidebarY + sidebarHeight) {
+            int relY = mouseY - sidebarY;
+            int idx = leftScrollOffset + relY / ITEM_HEIGHT;
+            if (idx >= 0 && idx < allPlaylists.size()) {
+                MusicListData playlist = allPlaylists.get(idx);
+                if (playlist.getId() > -2) {
+                    hoveredPlaylistIndex = idx;
                 }
-            } else if (musicPlayer.isPaused()) {
-                context.drawText(this.textRenderer, "已暂停", centerX - 100, panelY + 38, 0xFFFFFF00, false);
             }
+        }
+        
+        // 歌曲列表悬停
+        int listX = panelX + SIDEBAR_WIDTH;
+        int listY = panelY + HEADER_HEIGHT + 45;
+        int listWidth = panelWidth - SIDEBAR_WIDTH;
+        int listHeight = panelHeight - HEADER_HEIGHT - BOTTOM_PANEL_HEIGHT - 55;
+        if (mouseX >= listX && mouseX < listX + listWidth && mouseY >= listY && mouseY < listY + listHeight) {
+            int relY = mouseY - listY;
+            int idx = rightScrollOffset + relY / ITEM_HEIGHT;
+            if (idx >= 0 && idx < currentSongList.size()) {
+                hoveredSongIndex = idx;
+            }
+        }
+        
+        // 底部按钮悬停
+        int bottomY = panelY + panelHeight - BOTTOM_PANEL_HEIGHT;
+        int btnAreaX = panelX + panelWidth / 2 - 100;
+        int btnY = bottomY + 8;
+        int btnSize = 26;
+        int btnGap = 6;
+        
+        prevBtnHover = isInRect(mouseX, mouseY, btnAreaX, btnY, btnSize, btnSize);
+        playBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize + btnGap, btnY, btnSize + 8, btnSize);
+        nextBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 2 + btnGap * 2 + 8, btnY, btnSize, btnSize);
+        modeBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 3 + btnGap * 3 + 8, btnY, btnSize, btnSize);
+        lyricsBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 4 + btnGap * 4 + 8, btnY, btnSize, btnSize);
+    }
+
+    private boolean wasMousePressed = false;
+    
+    @Override
+    public void tick() {
+        super.tick();
+        
+        if (this.client != null) {
+            long window = this.client.getWindow().getHandle();
+            boolean leftPressed = org.lwjgl.glfw.GLFW.glfwGetMouseButton(window, org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+            double[] xpos = new double[1];
+            double[] ypos = new double[1];
+            org.lwjgl.glfw.GLFW.glfwGetCursorPos(window, xpos, ypos);
+            double scaleFactor = this.client.getWindow().getScaleFactor();
+            double mouseX = xpos[0] / scaleFactor;
+            double mouseY = ypos[0] / scaleFactor;
+            
+            if (leftPressed && !wasMousePressed) {
+                handleMouseClicked(mouseX, mouseY, 0);
+            }
+            if (!leftPressed && wasMousePressed) {
+                handleMouseReleased(mouseX, mouseY, 0);
+            }
+            if (leftPressed) {
+                handleMouseDragged(mouseX, mouseY, 0, 0, 0);
+            }
+            wasMousePressed = leftPressed;
+        }
+    }
+    
+    private boolean handleMouseClicked(double mouseX, double mouseY, int button) {
+        int panelX = getPanelX();
+        int panelY = getPanelY();
+        int panelWidth = getPanelWidth();
+        int panelHeight = getPanelHeight();
+        
+        // 歌单点击
+        if (hoveredPlaylistIndex >= 0 && hoveredPlaylistIndex < allPlaylists.size()) {
+            MusicListData selected = allPlaylists.get(hoveredPlaylistIndex);
+            selectedPlaylistIndex = hoveredPlaylistIndex;
+            if (selected.getId() == -1) {
+                loadDailySongs();
+            } else if (selected.getId() > 0) {
+                loadPlaylistSongs(selected.getId());
+            }
+            return true;
+        }
+        
+        // 歌曲点击
+        if (hoveredSongIndex >= 0 && hoveredSongIndex < currentSongList.size()) {
+            if (musicPlayer != null) {
+                musicPlayer.setPlaylistAndPlay(currentSongList, hoveredSongIndex);
+            }
+            return true;
+        }
+        
+        // 控制按钮
+        if (prevBtnHover) {
+            if (musicPlayer != null) musicPlayer.playPrevious();
+            return true;
+        }
+        if (playBtnHover) {
+            if (musicPlayer != null) {
+                if (musicPlayer.isPlaying() && !musicPlayer.isPaused()) {
+                    // 正在播放，点击暂停
+                    musicPlayer.pause();
+                } else if (musicPlayer.isPaused()) {
+                    // 已暂停，点击继续播放
+                    musicPlayer.webplay();
+                } else if (!currentSongList.isEmpty()) {
+                    // 未播放，开始播放列表
+                    musicPlayer.setPlaylistAndPlay(currentSongList, 0);
+                }
+            }
+            return true;
+        }
+        if (nextBtnHover) {
+            if (musicPlayer != null) musicPlayer.playNext();
+            return true;
+        }
+        if (modeBtnHover) {
+            if (musicPlayer != null) musicPlayer.togglePlaybackMode();
+            return true;
+        }
+        if (lyricsBtnHover) {
+            LyricRenderer.toggleVisible();
+            MessageUtil.sendMessage("§a歌词显示: " + (LyricRenderer.getVisible() ? "开启" : "关闭"));
+            return true;
+        }
+        
+        // 音量滑块
+        int volX = panelX + panelWidth - 120 + 15;
+        int volY = panelY + panelHeight - BOTTOM_PANEL_HEIGHT + 14;
+        if (isInRect((int)mouseX, (int)mouseY, volX, volY, 80, 6)) {
+            volumeSliderDragging = true;
+            updateVolume((int)mouseX, volX);
+            return true;
+        }
+        
+        // 进度条
+        int progressX = panelX + PADDING;
+        int progressY = panelY + panelHeight - BOTTOM_PANEL_HEIGHT + 45;
+        int progressWidth = panelWidth - PADDING * 2 - 100;
+        if (isInRect((int)mouseX, (int)mouseY, progressX, progressY, progressWidth, 6)) {
+            progressSliderDragging = true;
+            updateProgress((int)mouseX, progressX, progressWidth);
+            return true;
+        }
+        
+        return false;
+    }
+
+    private boolean handleMouseReleased(double mouseX, double mouseY, int button) {
+        volumeSliderDragging = false;
+        progressSliderDragging = false;
+        return false;
+    }
+
+    private boolean handleMouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        int panelX = getPanelX();
+        int panelWidth = getPanelWidth();
+        
+        if (volumeSliderDragging) {
+            int volX = panelX + panelWidth - 120 + 15;
+            updateVolume((int)mouseX, volX);
+            return true;
+        }
+        if (progressSliderDragging) {
+            int progressX = panelX + PADDING;
+            int progressWidth = panelWidth - PADDING * 2 - 100;
+            updateProgress((int)mouseX, progressX, progressWidth);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        return handleMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+    
+    private boolean handleMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        int panelX = getPanelX();
+        int panelY = getPanelY();
+        int panelWidth = getPanelWidth();
+        int panelHeight = getPanelHeight();
+        
+        // 侧边栏滚动
+        if (mouseX >= panelX && mouseX < panelX + SIDEBAR_WIDTH && 
+            mouseY >= panelY + HEADER_HEIGHT && mouseY < panelY + panelHeight - BOTTOM_PANEL_HEIGHT) {
+            leftScrollOffset = (int) Math.max(0, Math.min(leftScrollOffset - verticalAmount,
+                    Math.max(0, allPlaylists.size() - maxVisibleLeftItems)));
+            return true;
+        }
+        
+        // 歌曲列表滚动
+        if (mouseX >= panelX + SIDEBAR_WIDTH && mouseX < panelX + panelWidth &&
+            mouseY >= panelY + HEADER_HEIGHT && mouseY < panelY + panelHeight - BOTTOM_PANEL_HEIGHT) {
+            rightScrollOffset = (int) Math.max(0, Math.min(rightScrollOffset - verticalAmount,
+                    Math.max(0, currentSongList.size() - maxVisibleRightItems)));
+            return true;
+        }
+        
+        return false;
+    }
+
+    private void updateVolume(int mouseX, int sliderX) {
+        volume = Math.max(0, Math.min(1, (float)(mouseX - sliderX) / 80));
+        if (musicPlayer != null) musicPlayer.setVolume(volume);
+    }
+
+    private void updateProgress(int mouseX, int progressX, int progressWidth) {
+        if (musicPlayer != null && musicPlayer.isPlaying()) {
+            float progress = Math.max(0, Math.min(1, (float)(mouseX - progressX) / progressWidth));
+            long duration = musicPlayer.getDuration();
+            musicPlayer.seek((long)(duration * progress));
         }
     }
 
@@ -493,6 +671,7 @@ public class NeteaseMusicGUI extends Screen {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
+<<<<<<< Updated upstream
     private void drawCustomButton(DrawContext context, int x, int y, int width, int height, String text, boolean hovered) {
         int color = hovered ? 0xFF5555AA : 0xFF444477;
         context.fill(x, y, x + width, y + height, color);
@@ -705,15 +884,14 @@ public class NeteaseMusicGUI extends Screen {
 
     private boolean isPointInRect(int x, int y, int rectX, int rectY, int rectWidth, int rectHeight) {
         return x >= rectX && x <= rectX + rectWidth && y >= rectY && y <= rectY + rectHeight;
+=======
+    private boolean isInRect(int x, int y, int rx, int ry, int rw, int rh) {
+        return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+>>>>>>> Stashed changes
     }
 
     @Override
     public boolean shouldPause() {
         return false;
-    }
-
-    @Override
-    public void close() {
-        super.close();
     }
 }

@@ -48,28 +48,44 @@ public class LaciamusicplayerClient implements ClientModInitializer {
                 "key.laciamusicplayer.netease",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_U,
+<<<<<<< Updated upstream
                 CATEGORY  // 使用 KeyBinding.Category 枚举 1.21.10
+=======
+                KeyBinding.Category.MISC
+>>>>>>> Stashed changes
         ));
 
         guiKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.laciamusicplayer.gui",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_I,
+<<<<<<< Updated upstream
                 CATEGORY
+=======
+                KeyBinding.Category.MISC
+>>>>>>> Stashed changes
         ));
 
         nextKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.laciamusicplayer.next",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_RIGHT_BRACKET,
+<<<<<<< Updated upstream
                 CATEGORY
+=======
+                KeyBinding.Category.MISC
+>>>>>>> Stashed changes
         ));
 
         upKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.laciamusicplayer.up",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_LEFT_BRACKET,
+<<<<<<< Updated upstream
                 CATEGORY
+=======
+                KeyBinding.Category.MISC
+>>>>>>> Stashed changes
         ));
 
 
