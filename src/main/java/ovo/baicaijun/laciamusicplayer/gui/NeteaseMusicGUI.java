@@ -510,7 +510,13 @@ public class NeteaseMusicGUI extends Screen {
     }
 
     private void renderBottomPanel(DrawContext context, int x, int y, int width) {
-        context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT, 0xFFF8F8F8);
+        // 底部面板背景（带下方圆角）
+        int radius = 8;
+        // 上半部分（无圆角）
+        context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT - radius, 0xFFF8F8F8);
+        // 下半部分（带圆角）
+        GuiTheme.drawRoundedRect(context, x, y + BOTTOM_PANEL_HEIGHT - radius * 2, width, radius * 2, 0xFFF8F8F8, radius);
+        // 顶部分割线
         context.fill(x, y, x + width, y + 1, GuiTheme.DIVIDER);
         
         int infoY = y + 8;

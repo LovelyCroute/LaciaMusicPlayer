@@ -268,8 +268,12 @@ public class MusicGUI extends Screen {
     }
 
     private void renderBottomPanel(DrawContext context, int x, int y, int width, int mouseX, int mouseY) {
-        // 底部面板背景
-        context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT, 0xFFF5F5F5);
+        // 底部面板背景（带下方圆角）
+        int radius = 8;
+        // 上半部分（无圆角）
+        context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT - radius, 0xFFF5F5F5);
+        // 下半部分（带圆角）
+        GuiTheme.drawRoundedRect(context, x, y + BOTTOM_PANEL_HEIGHT - radius * 2, width, radius * 2, 0xFFF5F5F5, radius);
         // 顶部分割线
         context.fill(x, y, x + width, y + 1, GuiTheme.DIVIDER);
         
