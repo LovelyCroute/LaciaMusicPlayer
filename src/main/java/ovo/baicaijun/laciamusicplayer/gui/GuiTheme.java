@@ -7,15 +7,15 @@ import net.minecraft.client.gui.DrawContext;
  */
 public class GuiTheme {
     // 主色调 - 粉色系
-    public static final int PRIMARY_PINK = 0xFFE91E63;        // 主粉色
-    public static final int PRIMARY_PINK_LIGHT = 0xFFF48FB1;  // 浅粉色
-    public static final int PRIMARY_PINK_DARK = 0xFFC2185B;   // 深粉色
+    public static final int PRIMARY_PINK = 0xFFE91E63;
+    public static final int PRIMARY_PINK_LIGHT = 0xFFF48FB1;
+    public static final int PRIMARY_PINK_DARK = 0xFFC2185B;
     
     // 背景色
-    public static final int BG_DARK = 0xF0202020;             // 深色背景
-    public static final int BG_PANEL = 0xE6F5F5F5;            // 面板背景（浅灰白）
-    public static final int BG_SIDEBAR = 0xF0FAFAFA;          // 侧边栏背景
-    public static final int BG_HEADER = 0xFFE91E63;           // 顶部栏背景（粉色）
+    public static final int BG_DARK = 0xF0202020;
+    public static final int BG_PANEL = 0xE6F5F5F5;
+    public static final int BG_SIDEBAR = 0xF0FAFAFA;
+    public static final int BG_HEADER = 0xFFE91E63;
     
     // 文字颜色
     public static final int TEXT_WHITE = 0xFFFFFFFF;
@@ -26,13 +26,13 @@ public class GuiTheme {
     
     // 按钮颜色
     public static final int BTN_NORMAL = 0xFFFFFFFF;
-    public static final int BTN_HOVER = 0xFFFCE4EC;           // 悬停时浅粉色
+    public static final int BTN_HOVER = 0xFFFCE4EC;
     public static final int BTN_BORDER = 0xFFE91E63;
     public static final int BTN_ACTIVE = 0xFFE91E63;
     
     // 列表项颜色
-    public static final int LIST_ITEM_HOVER = 0x33E91E63;     // 悬停半透明粉色
-    public static final int LIST_ITEM_SELECTED = 0x66E91E63;  // 选中半透明粉色
+    public static final int LIST_ITEM_HOVER = 0x33E91E63;
+    public static final int LIST_ITEM_SELECTED = 0x66E91E63;
     
     // 进度条颜色
     public static final int PROGRESS_BG = 0xFFE0E0E0;
@@ -49,23 +49,53 @@ public class GuiTheme {
     public static final int SHADOW = 0x33000000;
 
     /**
-     * 绘制圆角矩形（通过多层填充模拟）
+     * 绘制平滑圆角矩形（通过多层填充实现更好的圆角效果）
      */
     public static void drawRoundedRect(DrawContext context, int x, int y, int width, int height, int color, int radius) {
-        // 主体
-        context.fill(x + radius, y, x + width - radius, y + height, color);
-        context.fill(x, y + radius, x + width, y + height - radius, color);
+        if (radius <= 0 || width <= 0 || height <= 0) {
+            context.fill(x, y, x + width, y + height, color);
+            return;
+        }
         
-        // 四个角的圆角效果（简化版，用小矩形填充）
-        if (radius > 0) {
-            // 左上角
-            context.fill(x + 1, y + 1, x + radius, y + radius, color);
-            // 右上角
-            context.fill(x + width - radius, y + 1, x + width - 1, y + radius, color);
-            // 左下角
-            context.fill(x + 1, y + height - radius, x + radius, y + height - 1, color);
-            // 右下角
-            context.fill(x + width - radius, y + height - radius, x + width - 1, y + height - 1, color);
+        radius = Math.min(radius, Math.min(width, height) / 2);
+        
+        // 中间主体部分
+        context.fill(x + radius, y, x + width - radius, y + height, color);
+        // 左侧
+        context.fill(x, y + radius, x + radius, y + height - radius, color);
+        // 右侧
+        context.fill(x + width - radius, y + radius, x + width, y + height - radius, color);
+        
+        // 绘制四个圆角（使用多层小矩形模拟平滑圆角）
+        drawCornerPixels(context, x, y, radius, color, true, true);                    // 左上
+        drawCornerPixels(context, x + width - radius, y, radius, color, false, true);  // 右上
+        drawCornerPixels(context, x, y + height - radius, radius, color, true, false); // 左下
+        drawCornerPixels(context, x + width - radius, y + height - radius, radius, color, false, false); // 右下
+    }
+    
+    /**
+     * 绘制圆角像素（基于圆形方程计算）
+     */
+    private static void drawCornerPixels(DrawContext context, int cornerX, int cornerY, int radius, 
+                                          int color, boolean isLeft, boolean isTop) {
+        // 圆心位置
+        float cx = isLeft ? cornerX + radius : cornerX;
+        float cy = isTop ? cornerY + radius : cornerY;
+        
+        for (int py = 0; py < radius; py++) {
+            for (int px = 0; px < radius; px++) {
+                // 计算当前像素到圆心的距离
+                float dx = isLeft ? (radius - px - 0.5f) : (px + 0.5f);
+                float dy = isTop ? (radius - py - 0.5f) : (py + 0.5f);
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                
+                // 如果在圆内，绘制像素
+                if (dist <= radius) {
+                    int drawX = cornerX + px;
+                    int drawY = cornerY + py;
+                    context.fill(drawX, drawY, drawX + 1, drawY + 1, color);
+                }
+            }
         }
     }
 
@@ -74,10 +104,8 @@ public class GuiTheme {
      */
     public static void drawRoundedRectWithBorder(DrawContext context, int x, int y, int width, int height, 
                                                    int fillColor, int borderColor, int radius) {
-        // 先绘制边框（稍大一点）
         drawRoundedRect(context, x, y, width, height, borderColor, radius);
-        // 再绘制内部填充
-        drawRoundedRect(context, x + 1, y + 1, width - 2, height - 2, fillColor, radius > 0 ? radius - 1 : 0);
+        drawRoundedRect(context, x + 1, y + 1, width - 2, height - 2, fillColor, Math.max(0, radius - 1));
     }
 
     /**
@@ -130,9 +158,7 @@ public class GuiTheme {
      * 绘制进度条
      */
     public static void drawProgressBar(DrawContext context, int x, int y, int width, int height, float progress) {
-        // 背景
         drawRoundedRect(context, x, y, width, height, PROGRESS_BG, height / 2);
-        // 进度
         int progressWidth = (int) (width * Math.max(0, Math.min(1, progress)));
         if (progressWidth > 0) {
             drawRoundedRect(context, x, y, progressWidth, height, PROGRESS_FILL, height / 2);
@@ -146,10 +172,8 @@ public class GuiTheme {
                                       int scrollOffset, int totalItems, int visibleItems) {
         if (totalItems <= visibleItems) return;
         
-        // 背景
         context.fill(x, y, x + width, y + height, SCROLLBAR_BG);
         
-        // 滑块
         float scrollPercentage = (float) scrollOffset / Math.max(1, totalItems - visibleItems);
         int thumbHeight = Math.max(20, (int) (height * ((float) visibleItems / totalItems)));
         int thumbY = y + (int) (scrollPercentage * (height - thumbHeight));
@@ -168,9 +192,7 @@ public class GuiTheme {
      * 绘制阴影效果
      */
     public static void drawShadow(DrawContext context, int x, int y, int width, int height) {
-        // 底部阴影
         context.fill(x + 2, y + height, x + width + 2, y + height + 2, 0x22000000);
-        // 右侧阴影
         context.fill(x + width, y + 2, x + width + 2, y + height + 2, 0x22000000);
     }
 }

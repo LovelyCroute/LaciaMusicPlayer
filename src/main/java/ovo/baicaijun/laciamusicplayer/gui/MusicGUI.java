@@ -1,9 +1,7 @@
 package ovo.baicaijun.laciamusicplayer.gui;
 
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 import ovo.baicaijun.laciamusicplayer.client.LaciamusicplayerClient;
 import ovo.baicaijun.laciamusicplayer.music.MusicData;
@@ -43,7 +41,7 @@ public class MusicGUI extends Screen {
     private float volume = 0.5f;
 
     // --- 侧边栏菜单项 ---
-    private static final String[] MENU_ITEMS = {"全部音乐", "最近播放", "我的收藏"};
+    private static final String[] MENU_ITEMS = {"全部音乐"};
     private int selectedMenuIndex = 0;
 
     // --- 按钮悬停状态 ---
@@ -51,6 +49,9 @@ public class MusicGUI extends Screen {
     private boolean modeBtnHover, lyricsBtnHover;
     private int hoveredMusicIndex = -1;
     private int hoveredMenuIndex = -1;
+    
+    // --- 鼠标状态 ---
+    private boolean wasMousePressed = false;
 
     // --- 面板尺寸（70%窗口大小）---
     private int getPanelWidth() { return (int)(this.width * 0.7); }
@@ -106,7 +107,7 @@ public class MusicGUI extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         // 背景透明（不绘制遮罩）
         
-        // 主面板区域（60%窗口大小，居中）
+        // 主面板区域（70%窗口大小，居中）
         int panelX = getPanelX();
         int panelY = getPanelY();
         int panelWidth = getPanelWidth();
@@ -157,15 +158,8 @@ public class MusicGUI extends Screen {
                 handleMouseDragged(mouseX, mouseY, 0, 0, 0);
             }
             wasMousePressed = leftPressed;
-            
-            // 处理滚轮
-            // 滚轮需要通过其他方式处理
         }
     }
-    
-    private boolean wasMousePressed = false;
-    
-
 
     private void renderHeader(DrawContext context, int x, int y, int width) {
         // 粉色顶部栏
@@ -184,19 +178,6 @@ public class MusicGUI extends Screen {
                         GuiTheme.TEXT_WHITE, false);
     }
 
-<<<<<<< Updated upstream
-
-    @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
-        double mouseX = click.x();
-        double mouseY = click.y();
-
-        if (mouseX >= 0 && mouseX < LIST_WIDTH && mouseY >= 35 && mouseY < this.height - BOTTOM_PANEL_HEIGHT) {
-            int index = scrollOffset + (int) ((mouseY - 35) / ITEM_HEIGHT);
-            if (index >= 0 && index < musicNames.size()) {
-                if (!(selectedIndex == index && musicPlayer.isPlaying())) {
-                    playSongByIndex(index);
-=======
     private void renderSidebar(DrawContext context, int x, int y, int height) {
         // 侧边栏背景
         context.fill(x, y, x + SIDEBAR_WIDTH, y + height, GuiTheme.BG_SIDEBAR);
@@ -286,7 +267,6 @@ public class MusicGUI extends Screen {
         }
     }
 
-
     private void renderBottomPanel(DrawContext context, int x, int y, int width, int mouseX, int mouseY) {
         // 底部面板背景
         context.fill(x, y, x + width, y + BOTTOM_PANEL_HEIGHT, 0xFFF5F5F5);
@@ -313,18 +293,18 @@ public class MusicGUI extends Screen {
         }
         
         // 控制按钮区域（居中）
-        int btnAreaX = x + width / 2 - 100;
-        int btnY = y + 10;
         int btnSize = 28;
         int btnGap = 8;
+        int btnAreaX = x + width / 2 - (btnSize * 5 + btnGap * 4) / 2;
+        int btnY = y + 10;
         
         // 上一首
         drawControlButton(context, btnAreaX, btnY, btnSize, "◀◀", prevBtnHover);
         // 播放/暂停
         String playIcon = (musicPlayer != null && musicPlayer.isPlaying() && !musicPlayer.isPaused()) ? "⏸" : "▶";
-        drawControlButton(context, btnAreaX + btnSize + btnGap, btnY, btnSize + 10, playIcon, playBtnHover);
+        drawControlButton(context, btnAreaX + btnSize + btnGap, btnY, btnSize, playIcon, playBtnHover);
         // 下一首
-        drawControlButton(context, btnAreaX + btnSize * 2 + btnGap * 2 + 10, btnY, btnSize, "▶▶", nextBtnHover);
+        drawControlButton(context, btnAreaX + (btnSize + btnGap) * 2, btnY, btnSize, "▶▶", nextBtnHover);
         
         // 播放模式
         String modeIcon = "↻";
@@ -335,10 +315,10 @@ public class MusicGUI extends Screen {
                 default: modeIcon = "↻"; break;
             }
         }
-        drawControlButton(context, btnAreaX + btnSize * 3 + btnGap * 3 + 10, btnY, btnSize, modeIcon, modeBtnHover);
+        drawControlButton(context, btnAreaX + (btnSize + btnGap) * 3, btnY, btnSize, modeIcon, modeBtnHover);
         
         // 歌词按钮
-        drawControlButton(context, btnAreaX + btnSize * 4 + btnGap * 4 + 10, btnY, btnSize, "词", lyricsBtnHover);
+        drawControlButton(context, btnAreaX + (btnSize + btnGap) * 4, btnY, btnSize, "词", lyricsBtnHover);
         
         // 进度条
         int progressY = y + 45;
@@ -400,7 +380,6 @@ public class MusicGUI extends Screen {
                 int idx = relY / (ITEM_HEIGHT + 4);
                 if (idx >= 0 && idx < MENU_ITEMS.length) {
                     hoveredMenuIndex = idx;
->>>>>>> Stashed changes
                 }
             }
         }
@@ -421,16 +400,16 @@ public class MusicGUI extends Screen {
         
         // 底部按钮悬停
         int bottomY = panelY + panelHeight - BOTTOM_PANEL_HEIGHT;
-        int btnAreaX = panelX + panelWidth / 2 - 100;
-        int btnY = bottomY + 10;
         int btnSize = 28;
         int btnGap = 8;
+        int btnAreaX = panelX + panelWidth / 2 - (btnSize * 5 + btnGap * 4) / 2;
+        int btnY = bottomY + 10;
         
         prevBtnHover = isInRect(mouseX, mouseY, btnAreaX, btnY, btnSize, btnSize);
-        playBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize + btnGap, btnY, btnSize + 10, btnSize);
-        nextBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 2 + btnGap * 2 + 10, btnY, btnSize, btnSize);
-        modeBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 3 + btnGap * 3 + 10, btnY, btnSize, btnSize);
-        lyricsBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize * 4 + btnGap * 4 + 10, btnY, btnSize, btnSize);
+        playBtnHover = isInRect(mouseX, mouseY, btnAreaX + btnSize + btnGap, btnY, btnSize, btnSize);
+        nextBtnHover = isInRect(mouseX, mouseY, btnAreaX + (btnSize + btnGap) * 2, btnY, btnSize, btnSize);
+        modeBtnHover = isInRect(mouseX, mouseY, btnAreaX + (btnSize + btnGap) * 3, btnY, btnSize, btnSize);
+        lyricsBtnHover = isInRect(mouseX, mouseY, btnAreaX + (btnSize + btnGap) * 4, btnY, btnSize, btnSize);
     }
 
     private boolean handleMouseClicked(double mouseX, double mouseY, int button) {
@@ -522,12 +501,6 @@ public class MusicGUI extends Screen {
         return false;
     }
 
-<<<<<<< Updated upstream
-
-    @Override
-    public boolean keyPressed(KeyInput input) {
-        int keyCode = input.getKeycode();
-=======
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         int panelX = getPanelX();
@@ -546,33 +519,6 @@ public class MusicGUI extends Screen {
             return true;
         }
         return false;
-    }
-
-    private boolean handleKeyPressed(int keyCode, int scanCode, int modifiers) {
->>>>>>> Stashed changes
-        switch (keyCode) {
-            case 256: this.close(); return true;
-            case 264: // DOWN
-                if (selectedIndex < musicNames.size() - 1) {
-                    selectedIndex++;
-                    if (selectedIndex >= scrollOffset + maxVisibleItems) scrollOffset++;
-                }
-                return true;
-            case 265: // UP
-                if (selectedIndex > 0) {
-                    selectedIndex--;
-                    if (selectedIndex < scrollOffset) scrollOffset--;
-                }
-                return true;
-            case 257: // ENTER
-                if (selectedIndex >= 0) playSongByIndex(selectedIndex);
-                return true;
-        }
-<<<<<<< Updated upstream
-        return super.keyPressed(input);
-=======
-        return false;
->>>>>>> Stashed changes
     }
 
     private void updateVolume(int mouseX, int sliderX) {
@@ -605,98 +551,8 @@ public class MusicGUI extends Screen {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
-<<<<<<< Updated upstream
-    private void drawScrollBar(DrawContext context) {
-        if (musicNames.size() <= VISIBLE_ITEMS) return;
-        int scrollBarWidth = 8;
-        int scrollBarX = LIST_WIDTH - scrollBarWidth - 2;
-        int scrollBarY = 32;
-        int scrollBarHeight = this.height - BOTTOM_PANEL_HEIGHT - 34;
-        context.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0x66444444);
-        float scrollPercentage = (float) scrollOffset / Math.max(1, musicNames.size() - VISIBLE_ITEMS);
-        int scrollThumbHeight = Math.max(20, (int) (scrollBarHeight * ((float) VISIBLE_ITEMS / musicNames.size())));
-        int scrollThumbY = scrollBarY + (int) (scrollPercentage * (scrollBarHeight - scrollThumbHeight));
-        context.fill(scrollBarX, scrollThumbY, scrollBarX + scrollBarWidth, scrollThumbY + scrollThumbHeight, 0xCC888888);
-    }
-
-    private void updateButtonHoverState(int mouseX, int mouseY) {
-        playButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, PLAY_BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-        pauseButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, PAUSE_BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-        stopButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, STOP_BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-        prevButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, PREV_BUTTON_Y, 35, BUTTON_HEIGHT);
-        nextButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X + BUTTON_WIDTH - 35, NEXT_BUTTON_Y, 35, BUTTON_HEIGHT);
-        modeButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, MODE_BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-        lyricsButtonHovered = isPointInRect(mouseX, mouseY, CONTROL_X, LYRICS_BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-
-        if (volumeSliderDragging) updateVolumeFromMouseX(mouseX);
-        if (progressSliderDragging) updateProgressFromMouseX(mouseX);
-    }
-
-    private void updateVolumeFromMouseX(int mouseX) {
-        volume = Math.max(0, Math.min(1, (float) (mouseX - (CONTROL_X)) / VOLUME_SLIDER_WIDTH));
-        MusicPlayer.volume = volume;
-        if (musicPlayer != null) musicPlayer.setVolume(volume);
-    }
-
-    // 新增进度条更新方法
-    private void updateProgressFromMouseX(int mouseX) {
-        if (musicPlayer != null && musicPlayer.isPlaying()) {
-            int progressX = 10;
-            int progressWidth = this.width - 20;
-            float progress = (float) (mouseX - progressX) / progressWidth;
-            progress = Math.max(0, Math.min(1, progress));
-
-            long duration = musicPlayer.getDuration();
-            long seekPosition = (long) (duration * progress);
-            musicPlayer.seek(seekPosition);
-        }
-    }
-
-    @Override
-    public boolean mouseReleased(Click click) {
-        if (volumeSliderDragging) {
-            volumeSliderDragging = false;
-            return true;
-        }
-        if (progressSliderDragging) {
-            progressSliderDragging = false;
-            return true;
-        }
-        return super.mouseReleased(click);
-    }
-
-    @Override
-    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
-        double mouseX = click.x();
-        if (volumeSliderDragging) {
-            updateVolumeFromMouseX((int) mouseX);
-            return true;
-        }
-        if (progressSliderDragging) {
-            updateProgressFromMouseX((int) mouseX);
-            return true;
-        }
-        return super.mouseDragged(click, offsetX, offsetY);
-    }
-
-
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (mouseX < LIST_WIDTH && mouseY < this.height - BOTTOM_PANEL_HEIGHT) {
-            if (verticalAmount > 0) scrollOffset = Math.max(0, scrollOffset - 1);
-            else scrollOffset = Math.min(Math.max(0, musicNames.size() - VISIBLE_ITEMS), scrollOffset + 1);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean isPointInRect(int x, int y, int rectX, int rectY, int rectWidth, int rectHeight) {
-        return x >= rectX && x <= rectX + rectWidth && y >= rectY && y <= rectY + rectHeight;
-=======
     private boolean isInRect(int x, int y, int rx, int ry, int rw, int rh) {
         return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
->>>>>>> Stashed changes
     }
 
     @Override
